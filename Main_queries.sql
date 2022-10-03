@@ -1,9 +1,22 @@
--------------------------------------------------------
------APPS IN BOTH STORES-------------------------------
+--App Trader Project
 
---This query returns every column from both tables that we may want for analysis in Excel.
+--This file includes the following three queries. Each query returns the same set of columns
+--to enable their results to be combined for analysis.
+--1. Apps available in the App Store and Play Store,
+--2. Apps available only in the App Store,
+--3. Apps available only in the Play Store.
 
-WITH ps_apps_max_review_count AS
+----------------------------------------------------------
+-----1. APPS IN BOTH STORES-------------------------------
+
+--This query returns every column from both tables that may be useful for further analysis in Excel.
+
+--Note: The play_store_apps table includes 798 apps which have multiple records. To avoid having
+--      apps with multiple records in our analysis, we are only including records for each app
+--      in play_store_apps whose review_count value is the highest from among that app's records.
+--      We also use the DISTINCT keyword to remove duplicate records.
+
+WITH ps_apps_max_review_count AS    -- see note above
 	(SELECT DISTINCT *
 	FROM play_store_apps AS p1
 	WHERE p1.rating IS NOT NULL
@@ -11,6 +24,8 @@ WITH ps_apps_max_review_count AS
 								 FROM play_store_apps AS p2
 								 WHERE p2.name = p1.name)
 	 ),
+	-- For each app's price and rating, our analysis uses a weighted average of the price and rating
+	-- from each table, weighted by the review count from each table.
 	app_weighted_avg AS
 	(SELECT name, 
 	       (a.price*a.review_count::numeric + p.price::money::numeric*p.review_count) 
@@ -26,37 +41,36 @@ SELECT DISTINCT p.name,
 					  - CASE WHEN wa.weighted_avg_price <= 2.5 THEN 25000        --minus rights purchase expense
 							 ELSE wa.weighted_avg_price * 10000 END
 					  , 2) AS total_profit,										--equals total profit
-				5000 * (12 + 6 * ROUND(wa.weighted_avg_rating / 0.25,0)) as total_in_app_revenue,
-			    1000 * (12 + 6 * ROUND(wa.weighted_avg_rating / 0.25,0)) as total_marketing_expense,
+				5000 * (12 + 6 * ROUND(wa.weighted_avg_rating / 0.25,0)) AS total_in_app_revenue,
+			    1000 * (12 + 6 * ROUND(wa.weighted_avg_rating / 0.25,0)) AS total_marketing_expense,
 			    ROUND(CASE WHEN wa.weighted_avg_price <= 2.5 THEN 25000
-			 		  ELSE wa.weighted_avg_price * 10000 END, 2) AS rights_purchase_expense,
-			    12 + 6 * ROUND(wa.weighted_avg_rating / 0.25,0) as lifespan_months,
-				a.rating AS app_store_rating, 
-			    p.rating AS play_store_rating,
+			 		  ELSE wa.weighted_avg_price * 10000 END, 2)         AS rights_purchase_expense,
+			    12 + 6 * ROUND(wa.weighted_avg_rating / 0.25,0)  AS lifespan_months,
+				a.rating                        AS app_store_rating, 
+			    p.rating                        AS play_store_rating,
 			    ROUND(wa.weighted_avg_rating,2) AS weighted_avg_rating, 
 				a.review_count::numeric AS app_store_review_count,
-				p.review_count AS play_store_review_count,
-			    a.price AS app_store_price,
-				p.price::money::numeric AS play_store_price,
+				p.review_count          AS play_store_review_count,
+			    a.price                         AS app_store_price,
+				p.price::money::numeric         AS play_store_price,
 			    ROUND(wa.weighted_avg_price, 2) AS weighted_avg_price,
 				a.content_rating AS app_store_content_rating,
 				p.content_rating AS play_store_content_rating,
-				a.primary_genre AS app_store_primary_genre,
-				p.category AS play_store_category,
-				p.genres AS play_store_genres
+				a.primary_genre  AS app_store_primary_genre,
+				p.category       AS play_store_category,
+				p.genres         AS play_store_genres
 FROM app_store_apps a INNER JOIN ps_apps_max_review_count p USING(name)
 					  INNER JOIN app_weighted_avg wa USING(name)
 WHERE p.review_count = wa.ps_review_count
---ORDER BY total_profit DESC
-ORDER BY name;
+ORDER BY total_profit DESC
 
+-----------------------------------
+----2. APPS IN APP STORE ONLY------
 
---------------------------------
-----APPS IN APP STORE ONLY------
-
---Apps with more than one record in results:
---VR Roller Coaster
---Mannequin Challenge
+--Note: The two apps listed below each have two records in the app_store_apps table and 
+--      two records in our results.
+--           'VR Roller Coaster'
+--           'Mannequin Challenge'
 
 SELECT DISTINCT a.name,
 				'app_store' AS store,
@@ -87,14 +101,18 @@ FROM app_store_apps a LEFT JOIN play_store_apps p USING(name)
 WHERE p.name IS NULL
 ORDER BY total_profit DESC;
 
----------------------------------
-----APPS IN PLAY STORE ONLY------
+------------------------------------
+----3. APPS IN PLAY STORE ONLY------
 
---Apps with more than one record in results:
---'YouTube Gaming',
---'Learn C++',
---'Fuzzy Numbers: Pre-K Number Foundation',
---'Candy Bomb'
+--Note: This query only includes records for each app in play_store_apps whose review_count 
+--      value is the highest from among that app's records. We also use the DISTINCT keyword 
+--      to remove duplicate records.
+--      However, the four apps listed below each have two records with the maximum review count 
+--      for that app -- one with category = 'FAMILY' and another with a different category.
+--         'YouTube Gaming',
+--         'Learn C++',
+--         'Fuzzy Numbers: Pre-K Number Foundation',
+--         'Candy Bomb'
 
 WITH ps_apps_max_review_count AS
 	(SELECT DISTINCT *
@@ -134,16 +152,4 @@ WHERE a.name IS NULL
       AND p.rating IS NOT NULL
 ORDER BY total_profit DESC;
 
-----------------------------
---Selects records with the maximum review_count for each app.
-SELECT play_store_apps_reduced.name, count(*)
-FROM
-	(SELECT DISTINCT *
-	FROM play_store_apps AS p1
-	WHERE p1.rating IS NOT NULL
-		  AND p1.review_count = (SELECT MAX(review_count)
-								 FROM play_store_apps AS p2
-								 WHERE p2.name = p1.name)
-	 ) as play_store_apps_reduced
-GROUP BY play_store_apps_reduced.name
-ORDER BY count(*) desc;
+------
