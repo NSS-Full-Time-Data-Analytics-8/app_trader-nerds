@@ -45,6 +45,8 @@ SELECT DISTINCT p.name,
 			    1000 * (12 + 6 * ROUND(wa.weighted_avg_rating / 0.25,0)) AS total_marketing_expense,
 			    ROUND(CASE WHEN wa.weighted_avg_price <= 2.5 THEN 25000
 			 		  ELSE wa.weighted_avg_price * 10000 END, 2)         AS rights_purchase_expense,
+				--Lifespan is calculated by summing up quarter-stars of weighted rating and giving six months 
+				--per quarter-star. This is added to the twelve months estimated for a zero-star app.
 			    12 + 6 * ROUND(wa.weighted_avg_rating / 0.25,0)  AS lifespan_months,
 				a.rating                        AS app_store_rating, 
 			    p.rating                        AS play_store_rating,
@@ -62,7 +64,7 @@ SELECT DISTINCT p.name,
 FROM app_store_apps a INNER JOIN ps_apps_max_review_count p USING(name)
 					  INNER JOIN app_weighted_avg wa USING(name)
 WHERE p.review_count = wa.ps_review_count
-ORDER BY total_profit DESC
+ORDER BY total_profit DESC;
 
 -----------------------------------
 ----2. APPS IN APP STORE ONLY------
