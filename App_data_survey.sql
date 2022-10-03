@@ -135,3 +135,59 @@ SELECT DISTINCT(name) FROM app_store_apps WHERE rating is NULL;
 SELECT DISTINCT (name) FROM play_store_apps WHERE rating is NULL;
 --play store: 1464 apps do not have ratings
 
+-------------------------
+--------TEMP: Analysis of category = FAMILY
+SELECT name, category, count(*)
+FROM play_store_apps
+WHERE name IN (SELECT DISTINCT name
+				FROM play_store_apps
+				WHERE category LIKE 'FAMILY')
+	  AND category NOT LIKE 'FAMILY'
+GROUP BY name, category
+ORDER BY count(*);
+
+SELECT name, COUNT(DISTINCT category), count(*)
+FROM play_store_apps
+WHERE category NOT LIKE 'FAMILY'
+GROUP BY name
+ORDER BY COUNT(DISTINCT category) DESC;
+
+select * from play_store_apps 
+where name in ('Call Blocker','Calculator','Ruler','8 Ball Pool')
+ORDER BY NAME;
+
+SELECT distinct name
+FROM play_store_apps
+WHERE category LIKE 'FAMILY';
+
+SELECT name, review_count, count(*)
+from play_store_apps
+group by name, review_count
+order by count(*) desc;
+
+select * from play_store_apps 
+where name in ('Skyscanner','Nick','Google Keep','Fashion in Vogue')
+ORDER BY NAME;
+
+select name, review_count, category, count(*)
+from play_store_apps
+group by name, review_count, category
+order by count(*) desc;
+
+select name, review_count, count(*)
+from (SELECT DISTINCT * FROM play_store_apps) AS distinct_p_s_a
+group by name, review_count
+order by count(*) desc;
+--6 apps have two rows for the same name and review count.
+
+select * from app_store_apps 
+where name in ('YouTube Gaming',
+			   'Learn C++',
+			   --'ROBLOX',
+			   --'Dog Run - Pet Dog Simulator',
+			   'Fuzzy Numbers: Pre-K Number Foundation',
+			   'Candy Bomb')
+ORDER BY NAME, review_count DESC;
+
+select * from app_store_apps
+where name ilike 'Mannequin Challenge';

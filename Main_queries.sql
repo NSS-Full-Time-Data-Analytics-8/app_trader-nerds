@@ -3,22 +3,21 @@
 
 --This query returns every column from both tables that we may want for analysis in Excel.
 
---Two columns are commented out: 
---     play_store_apps.review_count
---     play_store_apps.category
---Including them causes extra records to appear in our results due to apps having multiple 
---records in play_store_apps with different values in those two columns.
-
---With those two columns commented out, we still have a small number of apps with extra records, 
---such as 'Solitaire' and 'Toca Life: City'; these are caused by differences in the review_count
---column large enough to affect the weighted average price (before rounding) which then affects rights_purchase_expense.
-
-WITH app_weighted_avg AS
+WITH ps_apps_max_review_count AS
+	(SELECT DISTINCT *
+	FROM play_store_apps AS p1
+	WHERE p1.rating IS NOT NULL
+		  AND p1.review_count = (SELECT MAX(review_count)
+								 FROM play_store_apps AS p2
+								 WHERE p2.name = p1.name)
+	 ),
+	app_weighted_avg AS
 	(SELECT name, 
 	       (a.price*a.review_count::numeric + p.price::money::numeric*p.review_count) 
 	          / (a.review_count::numeric + p.review_count) AS weighted_avg_price,
 		   (a.rating*a.review_count::numeric + p.rating*p.review_count)
-			 / (a.review_count::numeric + p.review_count) AS weighted_avg_rating
+			 / (a.review_count::numeric + p.review_count) AS weighted_avg_rating,
+	       p.review_count AS ps_review_count
 	FROM app_store_apps a INNER JOIN play_store_apps p USING(name))
 SELECT DISTINCT p.name,
 	            'both' AS store,
@@ -36,37 +35,28 @@ SELECT DISTINCT p.name,
 			    p.rating AS play_store_rating,
 			    ROUND(wa.weighted_avg_rating,2) AS weighted_avg_rating, 
 				a.review_count::numeric AS app_store_review_count,
-				--p.review_count AS play_store_review_count,
+				p.review_count AS play_store_review_count,
 			    a.price AS app_store_price,
 				p.price::money::numeric AS play_store_price,
 			    ROUND(wa.weighted_avg_price, 2) AS weighted_avg_price,
 				a.content_rating AS app_store_content_rating,
 				p.content_rating AS play_store_content_rating,
 				a.primary_genre AS app_store_primary_genre,
-				--p.category AS play_store_category,
+				p.category AS play_store_category,
 				p.genres AS play_store_genres
-FROM app_store_apps a INNER JOIN play_store_apps p USING(name)
+FROM app_store_apps a INNER JOIN ps_apps_max_review_count p USING(name)
 					  INNER JOIN app_weighted_avg wa USING(name)
---WHERE p.category NOT LIKE 'FAMILY'
-ORDER BY total_profit DESC;
---ORDER BY p.name;
+WHERE p.review_count = wa.ps_review_count
+--ORDER BY total_profit DESC
+ORDER BY name;
 
---------TEMP: Analysis of category = FAMILY
-SELECT name, category, count(*)
-FROM play_store_apps
-WHERE name IN (SELECT DISTINCT name
-				FROM play_store_apps
-				WHERE category LIKE 'FAMILY')
-	  AND category NOT LIKE 'FAMILY'
-GROUP BY name, category
-ORDER BY count(*);
-
-SELECT distinct name
-FROM play_store_apps
-WHERE category LIKE 'FAMILY';
 
 --------------------------------
 ----APPS IN APP STORE ONLY------
+
+--Apps with more than one record in results:
+--VR Roller Coaster
+--Mannequin Challenge
 
 SELECT DISTINCT a.name,
 				'app_store' AS store,
@@ -100,6 +90,20 @@ ORDER BY total_profit DESC;
 ---------------------------------
 ----APPS IN PLAY STORE ONLY------
 
+--Apps with more than one record in results:
+--'YouTube Gaming',
+--'Learn C++',
+--'Fuzzy Numbers: Pre-K Number Foundation',
+--'Candy Bomb'
+
+WITH ps_apps_max_review_count AS
+	(SELECT DISTINCT *
+	FROM play_store_apps AS p1
+	WHERE p1.rating IS NOT NULL
+		  AND p1.review_count = (SELECT MAX(review_count)
+								 FROM play_store_apps AS p2
+								 WHERE p2.name = p1.name)
+	 )
 SELECT DISTINCT p.name,
 				'play_store' AS store,
 				ROUND(2500 * (12 + 6 * ROUND(p.rating / 0.25,0))   --total revenue
@@ -125,7 +129,21 @@ SELECT DISTINCT p.name,
 				NULL       AS app_store_primary_genre,
 				p.category AS play_store_category,
 				p.genres   AS play_store_genres
-FROM play_store_apps p LEFT JOIN app_store_apps a USING(name)
+FROM ps_apps_max_review_count p LEFT JOIN app_store_apps a USING(name)
 WHERE a.name IS NULL
       AND p.rating IS NOT NULL
 ORDER BY total_profit DESC;
+
+----------------------------
+--Selects records with the maximum review_count for each app.
+SELECT play_store_apps_reduced.name, count(*)
+FROM
+	(SELECT DISTINCT *
+	FROM play_store_apps AS p1
+	WHERE p1.rating IS NOT NULL
+		  AND p1.review_count = (SELECT MAX(review_count)
+								 FROM play_store_apps AS p2
+								 WHERE p2.name = p1.name)
+	 ) as play_store_apps_reduced
+GROUP BY play_store_apps_reduced.name
+ORDER BY count(*) desc;
