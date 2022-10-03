@@ -24,14 +24,14 @@ WHERE rating IS NOT NULL AND rating > 4
 GROUP BY name, review_count, rating, category, price 
 ORDER BY review_count DESC;
 
------------APPLE----------
+-----------app store------
 
 SELECT * 
 FROM app_store_apps
 WHERE rating IS NOT NULL
 ORDER BY review_count DESC;
 
--------------------------
+---------------COMPARE SHARED APP and RANKINGS FROM BOTH STORES
 SELECT DISTINCT name, 
 		        apple.review_count AS apple_review, 
 			 	apple.rating AS a_rating,
@@ -43,7 +43,19 @@ INNER JOIN play_store_apps AS play
 USING(name)
 WHERE apple.rating IS NOT NULL AND play.rating IS NOT NULL
 GROUP BY name, apple.review_count, apple.rating, primary_genre, play.rating, play.review_count 
-ORDER BY p_review DESC
+ORDER BY p_rating DESC;
+
+--------FIND TOP RANKING GAMES in APP STORE
+
+SELECT DISTINCT  name, primary_genre, p.category, AVG(a.rating), a.review_count::numeric
+FROM app_store_apps AS a
+LEFT JOIN play_store_apps AS p
+USING(name)
+WHERE a.rating > 4
+GROUP BY name, primary_genre, a.review_count, p.category
+ORDER BY review_count DESC
+LIMIT 10;
+
 
 ------------------------
 
@@ -54,7 +66,7 @@ INNER JOIN play_store_apps
 USING(name)
 ORDER BY weighted_review_avg DESC;
 
-------------------------
+-------------WEIGHTED AVG of PLAYSTORE review score-----------
 SELECT DISTINCT play_store_apps.name, 
 ((app_store_apps.rating::numeric*app_store_apps.review_count::numeric+play_store_apps.rating::numeric*play_store_apps.review_count::numeric)/(app_store_apps.review_count::numeric + play_store_apps.review_count::numeric)) AS weighted_review_avg, app_store_apps.price
 FROM app_store_apps
@@ -62,7 +74,7 @@ INNER JOIN play_store_apps
 USING(name)
 ORDER BY weighted_review_avg DESC;
 
----------------------------------------
+----------HIGHEST REVIEWED FROM ALL STORE WHERE PRICE IS 0 --------------
 
 SELECT DISTINCT name, category, 
 primary_genre, 
@@ -76,24 +88,10 @@ USING(name)
 WHERE app.price::money = '0' AND play.price::money = '0'
 ORDER BY play.review_count DESC;
 
----------------------------------------
 
-WITH weighted_avg_price AS	(
-SELECT p.name, ((app_store_apps.price::numeric*app_store_apps.review_count::numeric+p.price::money::numeric*p.review_count::numeric)/(app_store_apps.review_count::numeric + p.review_count::numeric)) AS weighted_price_avg
-FROM app_store_apps
-INNER JOIN play_store_apps AS p
-USING(name)
-ORDER BY weighted_price_avg DESC
-						)
 						
---------------------------------------
-SELECT play_store_apps.name, ((app_store_apps.rating::numeric*app_store_apps.review_count::numeric+play_store_apps.rating::numeric*play_store_apps.review_count::numeric)/(app_store_apps.review_count::numeric + play_store_apps.review_count::numeric)) AS weighted_review_avg, app_store_apps.price
-FROM app_store_apps
-INNER JOIN play_store_apps
-USING(name)
-ORDER BY weighted_review_avg DESC;
+----------POTENTIAL PROFIT DATA FROM weighted averages -------------------
 
--------------------------------------
 
 WITH app_weighted_avg AS
 	(SELECT DISTINCT name, 
@@ -158,6 +156,23 @@ SELECT DISTINCT a.name,
 	   ROUND(CASE WHEN a.price <= 2.5 THEN 25000
              ELSE a.price * 10000 END, 2 )AS rights_purchase_cost,
        a.rating, 
+	  -- 12 + (6 * ROUND((a.rating / 0.25),0)) as lifespan_months,
+	  -- 5000 * (12 + (6 * ROUND((a.rating / 0.25),0))) as total_in_app_revenue,
+	  -- 1000 * (12 + (6 * ROUND((a.rating / 0.25),0))) as total_marketing_expense,
+	   ROUND(((5000 * (12 + (6 * ROUND((a.rating / 0.25),0)))) --monthly revenue
+	   - (1000 * (12 + (6 * ROUND((a.rating / 0.25),0)))) --minus monthly marketing expense
+	   - CASE WHEN a.price <= 2.5 THEN 25000    --minus rights purchase cost
+              ELSE a.price * 10000 END), 2)  
+	   AS total_profit
+FROM app_store_apps a FULL JOIN play_store_apps p USING(name)
+WHERE p.name IS NULL
+ORDER BY total_profit DESC;
+------------------------------------
+SELECT DISTINCT primary_genre, category, a.name,
+	   a.price,
+	   ROUND(CASE WHEN a.price <= 2.5 THEN 25000
+             ELSE a.price * 10000 END, 2 )AS rights_purchase_cost,
+       a.rating, 
 	   12 + (6 * ROUND((a.rating / 0.25),0)) as lifespan_months,
 	   5000 * (12 + (6 * ROUND((a.rating / 0.25),0))) as total_in_app_revenue,
 	   1000 * (12 + (6 * ROUND((a.rating / 0.25),0))) as total_marketing_expense,
@@ -166,6 +181,9 @@ SELECT DISTINCT a.name,
 	   - CASE WHEN a.price <= 2.5 THEN 25000    --minus rights purchase cost
               ELSE a.price * 10000 END), 2)  
 	   AS total_profit
-FROM app_store_apps a LEFT JOIN play_store_apps p USING(name)
-WHERE p.name IS NULL
+FROM app_store_apps a FULL JOIN play_store_apps p USING(name)
+WHERE p.name IS NULL AND primary_genre ILIKE 'BOOK'
 ORDER BY total_profit DESC;
+
+
+
